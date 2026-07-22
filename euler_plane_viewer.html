@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Euler → Plane Viewer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{
+    --bg-deep:#0f1316;
+    --bg-panel:#171c20;
+    --bg-panel-2:#1c2227;
+    --border:#2a3136;
+    --text:#e7edf0;
+    --text-dim:#8a97a1;
+    --accent:#4fd1c9;
+    --accent-2:#e3a75c;
+    --rd:#e5484d;
+    --td:#48c78e;
+    --nd:#4a90e2;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg-deep);color:var(--text);font-family:var(--sans);}
+  .app{display:flex;height:100vh;width:100%;overflow:hidden;}
+  .panel{
+    width:300px;min-width:300px;background:var(--bg-panel);
+    border-right:1px solid var(--border);
+    padding:18px 16px 16px;overflow-y:auto;
+  }
+  .brand{
+    font-family:var(--mono);font-size:13px;letter-spacing:0.14em;color:var(--accent);
+    font-weight:700;
+  }
+  .brand-sub{
+    font-size:11px;color:var(--text-dim);letter-spacing:0.03em;margin-top:3px;margin-bottom:18px;
+  }
+  .group{
+    border-top:1px solid var(--border);padding-top:12px;margin-top:14px;
+  }
+  .group-title{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:0.12em;color:var(--text-dim);
+    text-transform:uppercase;margin-bottom:10px;
+  }
+  label.field{display:block;font-size:12px;color:var(--text-dim);margin-bottom:4px;margin-top:10px;}
+  select, .num-input{
+    width:100%;background:var(--bg-panel-2);border:1px solid var(--border);color:var(--text);
+    border-radius:5px;padding:6px 8px;font-family:var(--mono);font-size:13px;
+  }
+  select:focus, .num-input:focus, button:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;}
+  .row4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;}
+  .miller-label{font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:2px;font-family:var(--mono);}
+  .presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+  .chip{
+    font-family:var(--mono);font-size:11px;padding:5px 9px;border-radius:14px;
+    background:var(--bg-panel-2);border:1px solid var(--border);color:var(--text-dim);
+    cursor:pointer;transition:border-color .15s, color .15s;
+  }
+  .chip:hover{border-color:var(--accent);color:var(--text);}
+  .slider-row{margin-top:12px;}
+  .slider-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;}
+  .slider-head .name{font-size:12.5px;color:var(--text);}
+  .slider-head .val{font-family:var(--mono);font-size:12.5px;color:var(--accent);}
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:3px;background:var(--border);border-radius:2px;outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);
+    cursor:pointer;border:2px solid var(--bg-panel);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--bg-panel);cursor:pointer;
+  }
+  .checkline{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px;color:var(--text-dim);}
+  .checkline input{accent-color:var(--accent);}
+  button.action{
+    width:100%;margin-top:12px;background:var(--bg-panel-2);border:1px solid var(--border);
+    color:var(--text);font-family:var(--mono);font-size:12px;letter-spacing:0.05em;
+    padding:8px;border-radius:6px;cursor:pointer;transition:border-color .15s;
+  }
+  button.action:hover{border-color:var(--accent-2);}
+  .legend{display:flex;flex-direction:column;gap:5px;margin-top:10px;font-size:11.5px;color:var(--text-dim);font-family:var(--mono);}
+  .legend span.sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;}
+
+  .stage{position:relative;flex:1;min-width:0;background:radial-gradient(ellipse at 50% 30%, #161b1f 0%, var(--bg-deep) 70%);}
+  canvas{display:block;width:100%;height:100%;touch-action:none;}
+  .hint{
+    position:absolute;bottom:12px;right:16px;font-family:var(--mono);font-size:10.5px;
+    color:var(--text-dim);letter-spacing:0.03em;pointer-events:none;
+  }
+  .readout{
+    position:absolute;top:14px;left:16px;background:rgba(23,28,32,0.88);
+    border:1px solid var(--border);border-radius:8px;padding:12px 14px;
+    font-family:var(--mono);font-size:11.5px;line-height:1.55;color:var(--text);
+    backdrop-filter:blur(3px);min-width:230px;
+  }
+  .readout .hd{color:var(--text-dim);font-size:10px;letter-spacing:0.1em;margin-bottom:6px;text-transform:uppercase;}
+  .readout .row{display:flex;justify-content:space-between;gap:14px;}
+  .mat{display:grid;grid-template-columns:repeat(3,1fr);gap:2px 10px;margin:4px 0 8px;}
+  .mat span{text-align:right;color:var(--accent-2);}
+  .pf-wrap{display:flex;align-items:center;gap:12px;margin-top:8px;}
+  svg.pf{overflow:visible;}
+
+  @media (max-width:800px){
+    .app{flex-direction:column;}
+    .panel{width:100%;min-width:0;max-height:46vh;border-right:none;border-bottom:1px solid var(--border);}
+    .stage{height:54vh;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <div class="brand">EULER &rarr; PLANE</div>
+    <div class="brand-sub">crystallographic pole &amp; plane viewer</div>
+
+    <div class="group">
+      <div class="group-title">Crystal system</div>
+      <select id="system">
+        <option value="hex" selected>Hexagonal (h k · l)</option>
+        <option value="cubic">Cubic / orthogonal (h k l)</option>
+      </select>
+      <div id="acaRow">
+        <label class="field">Material (c / a ratio)</label>
+        <select id="coaPreset">
+          <option value="1.568">Beryllium (Be) &middot; 1.568</option>
+          <option value="1.623">Cobalt (Co) &middot; 1.623</option>
+          <option value="1.624">Magnesium (Mg) &middot; 1.624</option>
+          <option value="1.593">Zirconium (Zr) &middot; 1.593</option>
+          <option value="1.587" selected>Titanium (Ti) &middot; 1.587</option>
+          <option value="1.856">Zinc (Zn) &middot; 1.856</option>
+          <option value="1.886">Cadmium (Cd) &middot; 1.886</option>
+          <option value="1.633">Ideal HCP &middot; 1.633</option>
+          <option value="custom">Custom&hellip;</option>
+        </select>
+        <input type="number" id="coa" class="num-input" step="0.001" value="1.587" style="margin-top:6px;">
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">Plane indices</div>
+      <div class="row3" id="hklRow">
+        <div><div class="miller-label">h</div><input type="number" id="h" class="num-input" value="0" step="1"></div>
+        <div><div class="miller-label">k</div><input type="number" id="k" class="num-input" value="0" step="1"></div>
+        <div><div class="miller-label">l</div><input type="number" id="l" class="num-input" value="1" step="1"></div>
+      </div>
+      <div class="miller-label" id="iLabel" style="margin-top:4px;">i = -(h+k) = 0</div>
+      <div class="presets" id="presets"></div>
+      <label class="checkline"><input type="checkbox" id="showFamily"> show {hkl} family (all symmetry-equivalent planes)</label>
+    </div>
+
+    <div class="group">
+      <div class="group-title">Euler angles &middot; Bunge (ZXZ)</div>
+      <div class="slider-row">
+        <div class="slider-head"><span class="name">&phi;&#8321;</span><span class="val" id="phi1Val">0.0&deg;</span></div>
+        <input type="range" id="phi1" min="0" max="360" step="0.5" value="0">
+      </div>
+      <div class="slider-row">
+        <div class="slider-head"><span class="name">&Phi;</span><span class="val" id="PhiVal">0.0&deg;</span></div>
+        <input type="range" id="Phi" min="0" max="180" step="0.5" value="0">
+      </div>
+      <div class="slider-row">
+        <div class="slider-head"><span class="name">&phi;&#8322;</span><span class="val" id="phi2Val">0.0&deg;</span></div>
+        <input type="range" id="phi2" min="0" max="360" step="0.5" value="0">
+      </div>
+      <button class="action" id="resetEuler">RESET ANGLES TO 0</button>
+    </div>
+
+    <div class="group">
+      <div class="group-title">View</div>
+      <label class="checkline"><input type="checkbox" id="showCrystalAxes" checked> show crystal axes (X<sub>c</sub>Y<sub>c</sub>Z<sub>c</sub>)</label>
+      <button class="action" id="resetView">RESET CAMERA</button>
+      <div class="legend">
+        <div><span class="sw" style="background:var(--rd)"></span>RD &middot; sample X</div>
+        <div><span class="sw" style="background:var(--td)"></span>TD &middot; sample Y</div>
+        <div><span class="sw" style="background:var(--nd)"></span>ND &middot; sample Z</div>
+        <div><span class="sw" style="background:var(--accent)"></span>plane pole (normal)</div>
+        <div><span class="sw" style="background:var(--accent-2)"></span>crystal axes</div>
+        <div style="opacity:0.7;">family members: one colour each</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <canvas id="c"></canvas>
+    <div class="readout">
+      <div class="hd">Orientation matrix g (sample&rarr;crystal)</div>
+      <div class="mat" id="matOut"></div>
+      <div class="row"><span>n (crystal)</span><span id="nCrystal" style="color:var(--text-dim)"></span></div>
+      <div class="row"><span>n (sample)</span><span id="nSample" style="color:var(--accent)"></span></div>
+      <div class="pf-wrap">
+        <svg class="pf" id="pfSvg" width="70" height="70" viewBox="0 0 70 70">
+          <circle cx="35" cy="35" r="30" fill="none" stroke="#3a4248" stroke-width="1"/>
+          <line x1="5" y1="35" x2="65" y2="35" stroke="#2a3136" stroke-width="1"/>
+          <line x1="35" y1="5" x2="35" y2="65" stroke="#2a3136" stroke-width="1"/>
+          <text x="66" y="38" font-size="7" fill="#8a97a1" font-family="ui-monospace,monospace">RD</text>
+          <text x="30" y="12" font-size="7" fill="#8a97a1" font-family="ui-monospace,monospace">TD</text>
+          <circle id="pfDot" cx="35" cy="35" r="3.5" fill="#4fd1c9"/>
+        </svg>
+        <div>
+          <div class="row" style="min-width:110px;"><span>&alpha;</span><span id="polarOut">0.0&deg;</span></div>
+          <div class="row"><span>&beta;</span><span id="azOut">0.0&deg;</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="hint">drag to orbit &middot; scroll to zoom</div>
+  </main>
+</div>
+
+<script>
+// ---------- linear algebra helpers ----------
+function degToRad(d){return d*Math.PI/180;}
+function radToDeg(r){return r*180/Math.PI;}
+function normalize(v){
+  const len=Math.hypot(v[0],v[1],v[2]);
+  if(len<1e-9) return [0,0,1];
+  return [v[0]/len, v[1]/len, v[2]/len];
+}
+function transpose(m){
+  return [
+    [m[0][0],m[1][0],m[2][0]],
+    [m[0][1],m[1][1],m[2][1]],
+    [m[0][2],m[1][2],m[2][2]]
+  ];
+}
+function matVec(m,v){
+  return [
+    m[0][0]*v[0]+m[0][1]*v[1]+m[0][2]*v[2],
+    m[1][0]*v[0]+m[1][1]*v[1]+m[1][2]*v[2],
+    m[2][0]*v[0]+m[2][1]*v[1]+m[2][2]*v[2]
+  ];
+}
+// Bunge Euler angles (ZXZ), radians. g transforms sample -> crystal: v_c = g * v_s
+function bungeMatrix(phi1,Phi,phi2){
+  const c1=Math.cos(phi1), s1=Math.sin(phi1);
+  const c=Math.cos(Phi),  s=Math.sin(Phi);
+  const c2=Math.cos(phi2), s2=Math.sin(phi2);
+  return [
+    [ c1*c2 - s1*s2*c,   s1*c2 + c1*s2*c,   s2*s ],
+    [-c1*s2 - s1*c2*c,  -s1*s2 + c1*c2*c,   c2*s ],
+    [ s1*s,             -c1*s,               c   ]
+  ];
+}
+// unnormalized reciprocal-lattice vector G = h*b1+k*b2+l*b3 (a = 1 schematic unit).
+// Cubic: orthonormal axes, G=(h,k,l). Hexagonal: a1,a2 at 120°, c-axis via aOverC=a/c.
+// Both the plane's normal direction AND its position (see D below) come from this G.
+function crystalG(system,h,k,l,aOverC){
+  return system==='hex' ? [ h, (h+2*k)/Math.sqrt(3), l*aOverC ] : [h,k,l];
+}
+// materials frame (x=RD,y=TD,z=ND) -> three.js frame (X=RD,Y=ND,Z=TD)
+function toThree(v){ return new THREE.Vector3(v[0], v[2], v[1]); }
+
+// ---------- three.js scene ----------
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(42,1,0.1,100);
+
+let azimuth=0.9, polar=1.05, radius=3.4;
+function updateCamera(){
+  camera.position.set(
+    radius*Math.sin(polar)*Math.sin(azimuth),
+    radius*Math.cos(polar),
+    radius*Math.sin(polar)*Math.cos(azimuth)
+  );
+  camera.lookAt(0,0,0);
+}
+updateCamera();
+
+function resize(){
+  const w=canvas.clientWidth, h=canvas.clientHeight;
+  if(w===0||h===0) return;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(canvas);
+
+// crystal unit cell — this rotates WITH the crystal (orientation g), since which
+// corner/edge a given (hkl) plane cuts off is a crystal-frame fact.
+// Cubic: a cube, corners at (0,1)^3 recentered. Hexagonal: a true hexagonal prism
+// (regular hexagon base, edge = a = 1, height = c = a*(c/a ratio)), matching the
+// conventional HCP cell most textbooks draw.
+const UNIT=0.5; // cubic half-extent
+function cubeCorners(s){
+  const c=[];
+  for(let i=0;i<8;i++) c.push([ (i&4)?s:-s, (i&2)?s:-s, (i&1)?s:-s ]);
+  return c;
+}
+function cubeEdgeIndices(){
+  const e=[];
+  for(let i=0;i<8;i++){ [1,2,4].forEach(bit=>{ const j=i^bit; if(j>i) e.push([i,j]); }); }
+  return e;
+}
+const CUBIC_CORNERS = cubeCorners(UNIT);
+const CUBIC_EDGES = cubeEdgeIndices();
+const CUBIC_FACES = [ [0,1,3,2], [4,5,7,6], [0,1,5,4], [2,3,7,6], [0,2,6,4], [1,3,7,5] ];
+
+// hexagonal prism: 0-5 = bottom ring, 6-11 = top ring, both centered on the c-axis;
+// the whole prism is recentered in z so it rotates in place about the origin.
+function hexPrismCorners(a, c){
+  const pts=[];
+  for(let n=0;n<6;n++){
+    const ang=degToRad(n*60);
+    pts.push([ a*Math.cos(ang), a*Math.sin(ang), -c/2 ]);
+  }
+  for(let n=0;n<6;n++){
+    const ang=degToRad(n*60);
+    pts.push([ a*Math.cos(ang), a*Math.sin(ang), c/2 ]);
+  }
+  return pts;
+}
+const HEX_EDGES=(()=>{
+  const e=[];
+  for(let n=0;n<6;n++) e.push([n,(n+1)%6]);          // bottom ring
+  for(let n=0;n<6;n++) e.push([6+n,6+((n+1)%6)]);    // top ring
+  for(let n=0;n<6;n++) e.push([n,6+n]);              // verticals
+  return e;
+})();
+const HEX_FACES=(()=>{
+  const f=[ [0,1,2,3,4,5], [6,7,8,9,10,11] ]; // bottom + top hexagon caps
+  for(let n=0;n<6;n++) f.push([ n, (n+1)%6, 6+((n+1)%6), 6+n ]); // 6 side rectangles
+  return f;
+})();
+
+const cellEdgeMat=new THREE.LineBasicMaterial({color:0x555f68});
+const cellLines=new THREE.LineSegments(new THREE.BufferGeometry(), cellEdgeMat);
+scene.add(cellLines);
+const cellFaceMat=new THREE.MeshBasicMaterial({color:0x232a2f, transparent:true, opacity:0.08, side:THREE.DoubleSide, depthWrite:false});
+const cellFaces=new THREE.Mesh(new THREE.BufferGeometry(), cellFaceMat);
+scene.add(cellFaces);
+
+function updateCellGeometry(sampleCorners3, edges, faces){
+  const lp=[];
+  edges.forEach(([a,b])=>{
+    lp.push(sampleCorners3[a].x,sampleCorners3[a].y,sampleCorners3[a].z);
+    lp.push(sampleCorners3[b].x,sampleCorners3[b].y,sampleCorners3[b].z);
+  });
+  cellLines.geometry.dispose();
+  const lg=new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lp,3));
+  cellLines.geometry=lg;
+
+  const fp=[];
+  faces.forEach(face=>{
+    const v0=sampleCorners3[face[0]];
+    for(let i=1;i<face.length-1;i++){
+      const v1=sampleCorners3[face[i]], v2=sampleCorners3[face[i+1]];
+      fp.push(v0.x,v0.y,v0.z, v1.x,v1.y,v1.z, v2.x,v2.y,v2.z);
+    }
+  });
+  cellFaces.geometry.dispose();
+  const fg=new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(fp,3));
+  cellFaces.geometry=fg;
+}
+
+function makeLabel(text,color){
+  const cv=document.createElement('canvas'); cv.width=128; cv.height=64;
+  const ctx=cv.getContext('2d');
+  ctx.font='bold 42px ui-monospace, monospace';
+  ctx.fillStyle=color; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(text,64,32);
+  const tex=new THREE.CanvasTexture(cv);
+  const mat=new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false});
+  const spr=new THREE.Sprite(mat);
+  spr.scale.set(0.34,0.17,1);
+  return spr;
+}
+
+// sample axes RD / TD / ND (fixed)
+const sampleAxes=[
+  {dir:[1,0,0], color:0xe5484d, label:'RD'},
+  {dir:[0,1,0], color:0x48c78e, label:'TD'},
+  {dir:[0,0,1], color:0x4a90e2, label:'ND'}
+];
+sampleAxes.forEach(a=>{
+  const d3=toThree(a.dir).normalize();
+  const arrow=new THREE.ArrowHelper(d3, new THREE.Vector3(0,0,0), 1.5, a.color, 0.15, 0.075);
+  scene.add(arrow);
+  const lbl=makeLabel(a.label, '#'+a.color.toString(16).padStart(6,'0'));
+  lbl.position.copy(d3.clone().multiplyScalar(1.72));
+  lbl.scale.set(0.22,0.11,1);
+  scene.add(lbl);
+});
+
+// crystal axes (rotating group of 3 arrows + labels)
+const crystalGroup=new THREE.Group();
+scene.add(crystalGroup);
+const crystalLabels=['X','Y','Z'].map(t=>t+'c');
+const crystalArrows=[0,1,2].map((i)=>{
+  const arrow=new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 0.72, 0xe3a75c, 0.11, 0.055);
+  crystalGroup.add(arrow);
+  const lbl=makeLabel(crystalLabels[i], '#e3a75c');
+  lbl.scale.set(0.2,0.1,1);
+  crystalGroup.add(lbl);
+  return {arrow, lbl};
+});
+
+// plane, clipped to the crystal cube via the classic intercept construction, + outline + normal arrow
+const planeMat=new THREE.MeshBasicMaterial({color:0x4fd1c9, transparent:true, opacity:0.45, side:THREE.DoubleSide, depthWrite:false});
+const planeMesh=new THREE.Mesh(new THREE.BufferGeometry(), planeMat);
+scene.add(planeMesh);
+const edgeMat=new THREE.LineBasicMaterial({color:0x8fe9e2});
+const edgeLines=new THREE.LineLoop(new THREE.BufferGeometry(), edgeMat);
+scene.add(edgeLines);
+const normalArrow=new THREE.ArrowHelper(new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,0), 0.95, 0x4fd1c9, 0.12, 0.06);
+scene.add(normalArrow);
+
+// classic Miller-plane construction: G·r = D in the crystal's own cell, where G is the
+// (unnormalized) reciprocal-lattice vector — e.g. (111) touches the three cube corners
+// nearest one vertex, giving a triangle, NOT a plane through the cell's center (which
+// would give a hexagon for (111)). Uses an epsilon so vertices that lie exactly ON the
+// plane (e.g. the whole top face for a basal (0001) plane) are still picked up — a
+// strict sign-flip test misses these whenever floating-point rounding (1/coa is not
+// exact) nudges an on-plane vertex to a tiny negative value instead of a clean zero.
+function planeCellIntersectionOffset(G,D,corners,edges){
+  const EPS=1e-7;
+  const val=v => G[0]*v[0]+G[1]*v[1]+G[2]*v[2]-D;
+  const pts=[];
+  edges.forEach(([a,b])=>{
+    const va=corners[a], vb=corners[b];
+    const da=val(va), db=val(vb);
+    const aOn=Math.abs(da)<EPS, bOn=Math.abs(db)<EPS;
+    if(aOn) pts.push(va.slice());
+    if(bOn) pts.push(vb.slice());
+    if(!aOn && !bOn && ((da>0&&db<0)||(da<0&&db>0))){
+      const t=da/(da-db);
+      pts.push([ va[0]+(vb[0]-va[0])*t, va[1]+(vb[1]-va[1])*t, va[2]+(vb[2]-va[2])*t ]);
+    }
+  });
+  return pts;
+}
+function dedupePts(pts, eps){
+  const out=[];
+  pts.forEach(p=>{
+    if(!out.some(q=>Math.hypot(q[0]-p[0],q[1]-p[1],q[2]-p[2])<eps)) out.push(p);
+  });
+  return out;
+}
+function sortPolygon(pts, normal){
+  if(pts.length<3) return pts;
+  const n=new THREE.Vector3(normal[0],normal[1],normal[2]).normalize();
+  const upv = Math.abs(n.y)<0.9 ? new THREE.Vector3(0,1,0) : new THREE.Vector3(1,0,0);
+  const u=new THREE.Vector3().crossVectors(n, upv).normalize();
+  const v=new THREE.Vector3().crossVectors(n, u).normalize();
+  return pts.slice().sort((p1,p2)=>{
+    const P1=new THREE.Vector3(p1[0],p1[1],p1[2]), P2=new THREE.Vector3(p2[0],p2[1],p2[2]);
+    return Math.atan2(P1.dot(v),P1.dot(u)) - Math.atan2(P2.dot(v),P2.dot(u));
+  });
+}
+function setPolygonGeometry(meshObj, edgeObj, sortedSamplePts3){
+  meshObj.geometry.dispose(); edgeObj.geometry.dispose();
+  if(sortedSamplePts3.length<3){
+    meshObj.visible=false; edgeObj.visible=false;
+    meshObj.geometry=new THREE.BufferGeometry();
+    edgeObj.geometry=new THREE.BufferGeometry();
+    return;
+  }
+  meshObj.visible=true; edgeObj.visible=true;
+  const centroid=new THREE.Vector3();
+  sortedSamplePts3.forEach(p=>centroid.add(p));
+  centroid.divideScalar(sortedSamplePts3.length);
+  const tri=[];
+  for(let i=0;i<sortedSamplePts3.length;i++){
+    const p1=sortedSamplePts3[i], p2=sortedSamplePts3[(i+1)%sortedSamplePts3.length];
+    tri.push(centroid.x,centroid.y,centroid.z, p1.x,p1.y,p1.z, p2.x,p2.y,p2.z);
+  }
+  const pg=new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.Float32BufferAttribute(tri,3));
+  meshObj.geometry=pg;
+  const lp=[]; sortedSamplePts3.forEach(p=>lp.push(p.x,p.y,p.z));
+  const lg=new THREE.BufferGeometry();
+  lg.setAttribute('position', new THREE.Float32BufferAttribute(lp,3));
+  edgeObj.geometry=lg;
+}
+function updatePlaneGeometry(pts3){ setPolygonGeometry(planeMesh, edgeLines, pts3); }
+
+// full pipeline for one (h,k,l): reciprocal vector -> intercept offset -> cell
+// intersection -> ordered polygon -> rotated into the sample frame
+function planeSamplePts3(system,hh,kk,ll,aOverC,corners,edges,gT){
+  const G=crystalG(system,hh,kk,ll,aOverC);
+  const nC=normalize(G);
+  const D=system==='hex' ? (1-0.5*ll) : (1-0.5*(hh+kk+ll));
+  const raw=dedupePts(planeCellIntersectionOffset(G,D,corners,edges),1e-4);
+  const sorted=sortPolygon(raw,nC);
+  return sorted.map(p=>toThree(matVec(gT,p)));
+}
+
+// pool of companion planes for symmetry-equivalent {hkl} family members, each given
+// its own hue so members are distinguishable at a glance
+const FAMILY_POOL_SIZE=47; // covers the largest possible multiplicity (48, minus the primary)
+const familyPool=[];
+for(let i=0;i<FAMILY_POOL_SIZE;i++){
+  const fm=new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({color:0x4fd1c9, transparent:true, opacity:0.26, side:THREE.DoubleSide, depthWrite:false}));
+  fm.visible=false; scene.add(fm);
+  const fe=new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({color:0x4fd1c9, transparent:true, opacity:0.7}));
+  fe.visible=false; scene.add(fe);
+  familyPool.push({mesh:fm, edge:fe});
+}
+function familyColor(idx,total){ return new THREE.Color().setHSL(idx/Math.max(total,1), 0.62, 0.58); }
+function keyOf(t){ return t.map(x=>Math.round(x*1e6)).join(','); }
+function permutations3(arr){
+  const [a,b,c]=arr;
+  return [[a,b,c],[a,c,b],[b,a,c],[b,c,a],[c,a,b],[c,b,a]];
+}
+// symmetry-equivalent {hkl} (or {hkil}) members. Cubic: all permutations x all sign
+// flips of (h,k,l) — reproduces the standard multiplicities (6/12/8/24/48). Hex: all
+// permutations x sign flips of the Miller-Bravais (h,k,i) triple, combined with l/-l —
+// reproduces the standard hexagonal multiplicities (2/6/12/12 for 0001/10-10/10-11/11-22).
+function generateFamily(system,h,k,l){
+  const seen=new Set(); const out=[];
+  function add(t){
+    if(Math.abs(t[0])<1e-9 && Math.abs(t[1])<1e-9 && Math.abs(t[2])<1e-9) return;
+    const key=keyOf(t);
+    if(!seen.has(key)){ seen.add(key); out.push(t); }
+  }
+  if(system==='cubic'){
+    const signs=[1,-1];
+    permutations3([h,k,l]).forEach(p=>{
+      signs.forEach(sx=>signs.forEach(sy=>signs.forEach(sz=>{
+        add([p[0]*sx, p[1]*sy, p[2]*sz]);
+      })));
+    });
+  } else {
+    const i=-(h+k);
+    const hkiRaw=[];
+    permutations3([h,k,i]).forEach(p=>{ hkiRaw.push(p); hkiRaw.push([-p[0],-p[1],-p[2]]); });
+    const hkiSeen=new Set(); const hkiUnique=[];
+    hkiRaw.forEach(p=>{ const key=keyOf(p); if(!hkiSeen.has(key)){ hkiSeen.add(key); hkiUnique.push(p); } });
+    hkiUnique.forEach(p=>{ add([p[0],p[1],l]); add([p[0],p[1],-l]); });
+  }
+  return out;
+}
+
+// ---------- UI wiring ----------
+const el=id=>document.getElementById(id);
+const presetsByHex=[
+  ['Basal (0001)',0,0,1],
+  ['Prismatic {10-10}',1,0,0],
+  ['Pyramidal <a> {10-11}',1,0,1],
+  ['Pyramidal <c+a> {11-22}',1,1,2],
+  ['Tension twin {10-12}',1,0,2]
+];
+const presetsByCubic=[
+  ['{100}',1,0,0],
+  ['{110}',1,1,0],
+  ['{111}',1,1,1]
+];
+function renderPresets(){
+  const list = el('system').value==='hex' ? presetsByHex : presetsByCubic;
+  el('presets').innerHTML='';
+  list.forEach(p=>{
+    const chip=document.createElement('div');
+    chip.className='chip'; chip.textContent=p[0];
+    chip.onclick=()=>{ el('h').value=p[1]; el('k').value=p[2]; el('l').value=p[3]; update(); };
+    el('presets').appendChild(chip);
+  });
+}
+el('system').addEventListener('change',()=>{
+  el('acaRow').style.display = el('system').value==='hex' ? 'block' : 'none';
+  renderPresets(); update();
+});
+el('coaPreset').addEventListener('change', ()=>{
+  if(el('coaPreset').value!=='custom'){ el('coa').value=el('coaPreset').value; update(); }
+});
+el('coa').addEventListener('input', ()=>{ el('coaPreset').value='custom'; update(); });
+el('showFamily').addEventListener('change', update);
+['h','k','l'].forEach(id=> el(id).addEventListener('input', update));
+['phi1','Phi','phi2'].forEach(id=>{
+  el(id).addEventListener('input', ()=>{
+    el(id+'Val').textContent = parseFloat(el(id).value).toFixed(1)+'\u00b0';
+    update();
+  });
+});
+el('resetEuler').addEventListener('click', ()=>{
+  ['phi1','Phi','phi2'].forEach(id=>{ el(id).value=0; el(id+'Val').textContent='0.0\u00b0'; });
+  update();
+});
+el('resetView').addEventListener('click', ()=>{ azimuth=0.9; polar=1.05; radius=3.4; updateCamera(); });
+el('showCrystalAxes').addEventListener('change', ()=>{ crystalGroup.visible = el('showCrystalAxes').checked; });
+
+// orbit controls (pointer drag + wheel)
+let dragging=false, lastX=0, lastY=0;
+canvas.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', e=>{
+  if(!dragging) return;
+  const dx=e.clientX-lastX, dy=e.clientY-lastY;
+  azimuth -= dx*0.006; polar -= dy*0.006;
+  polar=Math.max(0.12, Math.min(Math.PI-0.12, polar));
+  lastX=e.clientX; lastY=e.clientY;
+  updateCamera();
+});
+window.addEventListener('pointerup', ()=>{ dragging=false; });
+canvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  radius += e.deltaY*0.003;
+  radius=Math.max(1.6, Math.min(7, radius));
+  updateCamera();
+}, {passive:false});
+
+function fmt(v){ return v.toFixed(3); }
+
+function update(){
+  const system=el('system').value;
+  const h=parseFloat(el('h').value)||0, k=parseFloat(el('k').value)||0, l=parseFloat(el('l').value)||0;
+  el('iLabel').style.display = system==='hex' ? 'block' : 'none';
+  if(system==='hex') el('iLabel').textContent = 'i = -(h+k) = '+(-(h+k));
+
+  const aOverC = 1/(parseFloat(el('coa').value)||1.587);
+  const nCrystal = normalize(crystalG(system,h,k,l,aOverC));
+
+  // active cell: cube for cubic, true hexagonal prism (edge a=1, height c) for hex
+  const coa = parseFloat(el('coa').value)||1.587;
+  const corners = system==='hex' ? hexPrismCorners(1, coa) : CUBIC_CORNERS;
+  const edges   = system==='hex' ? HEX_EDGES : CUBIC_EDGES;
+  const faces   = system==='hex' ? HEX_FACES : CUBIC_FACES;
+
+  const phi1=degToRad(parseFloat(el('phi1').value));
+  const Phi =degToRad(parseFloat(el('Phi').value));
+  const phi2=degToRad(parseFloat(el('phi2').value));
+  const g = bungeMatrix(phi1,Phi,phi2);
+  const gT = transpose(g);
+  const nSample = normalize(matVec(gT, nCrystal)); // true signed normal, no hemisphere flip
+
+  // rotate the crystal cell into the sample frame
+  const sampleCorners3 = corners.map(c => toThree(matVec(gT, c)));
+  updateCellGeometry(sampleCorners3, edges, faces);
+
+  // primary corner-cut (hkl) plane
+  updatePlaneGeometry(planeSamplePts3(system,h,k,l,aOverC,corners,edges,gT));
+
+  // symmetry-equivalent {hkl} family, drawn as dim companion planes
+  const showFamily = el('showFamily').checked;
+  const familyList = showFamily ? generateFamily(system,h,k,l).filter(t=>keyOf(t)!==keyOf([h,k,l])) : [];
+  familyPool.forEach((fp,idx)=>{
+    if(idx<familyList.length){
+      const [hh,kk,ll]=familyList[idx];
+      const col=familyColor(idx, familyList.length);
+      fp.mesh.material.color.copy(col);
+      fp.edge.material.color.copy(col);
+      setPolygonGeometry(fp.mesh, fp.edge, planeSamplePts3(system,hh,kk,ll,aOverC,corners,edges,gT));
+    } else {
+      fp.mesh.visible=false; fp.edge.visible=false;
+    }
+  });
+
+  const n3 = toThree(nSample).normalize();
+  normalArrow.setDirection(n3);
+
+  // crystal axes
+  [0,1,2].forEach(i=>{
+    const rowVec = normalize(g[i]); // crystal axis i expressed in sample frame
+    const d3 = toThree(rowVec).normalize();
+    crystalArrows[i].arrow.setDirection(d3);
+    crystalArrows[i].lbl.position.copy(d3.clone().multiplyScalar(0.9));
+  });
+
+  // readout: matrix
+  const matOut=el('matOut'); matOut.innerHTML='';
+  for(let r=0;r<3;r++) for(let c2=0;c2<3;c2++){
+    const s=document.createElement('span'); s.textContent=fmt(g[r][c2]); matOut.appendChild(s);
+  }
+  el('nCrystal').textContent = `[${fmt(nCrystal[0])}, ${fmt(nCrystal[1])}, ${fmt(nCrystal[2])}]`;
+  el('nSample').textContent  = `[${fmt(nSample[0])}, ${fmt(nSample[1])}, ${fmt(nSample[2])}]`;
+
+  // pole-figure readout uses the upper-hemisphere copy purely for display convention
+  const nPF = nSample[2] < 0 ? nSample.map(x=>-x) : nSample;
+  const alpha = radToDeg(Math.acos(Math.min(1,Math.max(-1,nPF[2])))); // polar angle from ND
+  let beta = radToDeg(Math.atan2(nPF[1], nPF[0]));
+  if(beta<0) beta+=360;
+  el('polarOut').textContent = alpha.toFixed(1)+'\u00b0';
+  el('azOut').textContent = beta.toFixed(1)+'\u00b0';
+
+  const R=28, cx=35, cy=35;
+  const r = R*(alpha/90);
+  const bx = cx + r*Math.cos(degToRad(beta));
+  const by = cy - r*Math.sin(degToRad(beta));
+  el('pfDot').setAttribute('cx', bx);
+  el('pfDot').setAttribute('cy', by);
+
+  const svg=el('pfSvg');
+  svg.querySelectorAll('.famDot').forEach(d=>d.remove());
+  familyList.forEach(([hh,kk,ll],idx)=>{
+    let nS=normalize(matVec(gT, normalize(crystalG(system,hh,kk,ll,aOverC))));
+    if(nS[2]<0) nS=nS.map(x=>-x);
+    const a=radToDeg(Math.acos(Math.min(1,Math.max(-1,nS[2]))));
+    let b=radToDeg(Math.atan2(nS[1],nS[0])); if(b<0) b+=360;
+    const rr=R*(a/90);
+    const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx', cx+rr*Math.cos(degToRad(b)));
+    dot.setAttribute('cy', cy-rr*Math.sin(degToRad(b)));
+    dot.setAttribute('r', 2.2);
+    dot.setAttribute('fill', '#'+familyColor(idx, familyList.length).getHexString());
+    dot.setAttribute('opacity', '0.85');
+    dot.setAttribute('class', 'famDot');
+    svg.appendChild(dot);
+  });
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  resize();
+  renderer.render(scene,camera);
+}
+renderPresets();
+update();
+animate();
+</script>
+</body>
+</html>
