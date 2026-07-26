@@ -1,4 +1,4 @@
-# Euler → Plane Viewer
+# Crystallographic-plane-and-euler-angle-visualisation
 
 An interactive web-based visualization tool for exploring crystallographic orientations, Euler angles, and crystallographic planes in **hexagonal (HCP)** and **cubic** crystal systems. The application provides real-time 3D visualization of the crystal, selected crystallographic plane, orientation matrix, pole figure projection, and the relationship between crystal and sample reference frames.
 
